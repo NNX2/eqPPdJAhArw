@@ -1,0 +1,88 @@
+-- Ce script doit être placé dans "StarterPlayerScripts" pour protéger le joueur local contre les scripts serveur malveillants
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer  -- Référence au joueur local
+local character = player.Character or player.CharacterAdded:Wait()  -- Récupérer le personnage du joueur
+local humanoid = character:WaitForChild("Humanoid")  -- Obtenir l'humanoïde du personnage
+
+-- Fonction pour désactiver les scripts serveurs nuisibles
+local function detectAndDisableServerScripts()
+    -- Parcourir les scripts dans le personnage et vérifier s'ils essaient de manipuler la santé
+    for _, child in pairs(character:GetDescendants()) do
+        if child:IsA("Script") or child:IsA("LocalScript") then
+            if child:FindFirstChild("HealthModifier") or string.match(child.Name, "Damage") then
+                child.Disabled = true  -- Désactiver immédiatement les scripts suspects
+            end
+        end
+    end
+end
+
+-- Supprimer ou réinitialiser les attributs suspects de l'humanoïde
+local function resetDangerousAttributes()
+    humanoid:SetAttribute("Drowning", 0)
+    humanoid:SetAttribute("OnFire", 0)
+    humanoid:SetAttribute("Poisoned", 0)
+end
+
+-- Fonction principale de protection continue
+local function maintainMaxProtection()
+    -- Réinitialiser la santé si elle est modifiée
+    if humanoid.Health < humanoid.MaxHealth then
+        humanoid.Health = humanoid.MaxHealth
+    end
+
+    -- Empêcher les jointures de se briser
+    humanoid.BreakJointsOnDeath = false
+
+    -- Vérifier et réinitialiser les attributs dangereux
+    resetDangerousAttributes()
+
+    -- Supprimer les objets nocifs (Feu, Fumée, etc.)
+    for _, child in pairs(character:GetChildren()) do
+        if child:IsA("Fire") or child:IsA("Smoke") or child:IsA("ParticleEmitter") or child:IsA("Explosion") then
+            child:Destroy()  -- Supprimer immédiatement les objets nuisibles
+        end
+    end
+
+    -- Surveiller les scripts malveillants en temps réel
+    detectAndDisableServerScripts()
+end
+
+-- Surveillance constante en utilisant RunService
+RunService.RenderStepped:Connect(maintainMaxProtection)
+
+-- Surveiller l'ajout de nouveaux scripts pour les désactiver immédiatement
+character.ChildAdded:Connect(function(child)
+    if child:IsA("Script") or child:IsA("LocalScript") then
+        if string.match(child.Name, "Damage") or child:FindFirstChild("HealthModifier") then
+            child.Disabled = true  -- Désactiver les scripts de dégâts ajoutés dynamiquement
+        end
+    end
+
+    -- Supprimer immédiatement les objets nuisibles ajoutés
+    if child:IsA("Fire") or child:IsA("Smoke") or child:IsA("ParticleEmitter") or child:IsA("Explosion") then
+        child:Destroy()
+    end
+end)
+
+-- Réappliquer la protection si le personnage réapparaît
+player.CharacterAdded:Connect(function(newCharacter)
+    character = newCharacter
+    humanoid = character:WaitForChild("Humanoid")
+
+    -- Redémarrer la protection pour le nouveau personnage
+    RunService.RenderStepped:Connect(maintainMaxProtection)
+    character.ChildAdded:Connect(function(child)
+        if child:IsA("Script") or child:IsA("LocalScript") then
+            if string.match(child.Name, "Damage") or child:FindFirstChild("HealthModifier") then
+                child.Disabled = true  -- Désactiver les scripts de dégâts ajoutés dynamiquement
+            end
+        end
+
+        -- Supprimer les objets nuisibles ajoutés
+        if child:IsA("Fire") or child:IsA("Smoke") or child:IsA("ParticleEmitter") or child:IsA("Explosion") then
+            child:Destroy()
+        end
+    end)
+end)
