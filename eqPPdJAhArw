@@ -1,0 +1,139 @@
+-- Script Roblox Lua : Contrôle directionnel de véhicule avec gestion de sortie du véhicule
+print("Car FlyV1 : Contrôle du véhicule avec W, A, S, D et gestion de sortie")
+
+-- Variables de configuration
+local speed = 6500 -- Force appliquée pour déplacer le véhicule
+local turnSpeed = 5 -- Vitesse de rotation lors des mouvements
+local isDriving = false -- Indique si le joueur est dans le véhicule
+
+-- Récupère le joueur local
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+
+-- Récupère le Humanoid pour détecter les événements de changement de siège
+local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+-- Fonction pour détecter le véhicule dans lequel le joueur est assis
+local function getVehicle()
+    if humanoid and humanoid.SeatPart then
+        local seat = humanoid.SeatPart
+        -- Vérifie si le siège est associé à un véhicule
+        local vehicle = seat.Parent
+        if vehicle:IsA("Model") and vehicle:FindFirstChildWhichIsA("VehicleSeat") then
+            return vehicle
+        end
+    end
+    return nil
+end
+
+-- Variables pour stocker les forces appliquées
+local primaryPart
+local forwardForce
+local rightForce
+
+-- Fonction pour initialiser le contrôle du véhicule
+local function initializeVehicleForces(vehicle)
+    -- Récupère la `PrimaryPart` du modèle du véhicule
+    primaryPart = vehicle.PrimaryPart or vehicle:FindFirstChildWhichIsA("BasePart")
+    if not primaryPart then
+        warn("Le véhicule doit avoir une `PrimaryPart` ou un `BasePart` pour le contrôle.")
+        return
+    end
+
+    -- Ajoute des forces de contrôle au véhicule
+    forwardForce = Instance.new("VectorForce")
+    forwardForce.Attachment0 = Instance.new("Attachment", primaryPart) -- Attachement pour appliquer la force
+    forwardForce.Force = Vector3.new(0, 0, 0)
+    forwardForce.RelativeTo = Enum.ActuatorRelativeTo.World
+    forwardForce.Parent = primaryPart
+
+    rightForce = Instance.new("VectorForce")
+    rightForce.Attachment0 = Instance.new("Attachment", primaryPart)
+    rightForce.Force = Vector3.new(0, 0, 0)
+    rightForce.RelativeTo = Enum.ActuatorRelativeTo.World
+    rightForce.Parent = primaryPart
+
+    print("Contrôle du véhicule activé.")
+end
+
+-- Variables pour le contrôle de mouvement
+local forwardDirection = 0
+local rightDirection = 0
+
+-- Connexion des contrôles clavier pour le mouvement directionnel
+local userInputService = game:GetService("UserInputService")
+
+-- Détecte les touches pressées pour ajuster la direction
+userInputService.InputBegan:Connect(function(input)
+    if isDriving then
+        if input.KeyCode == Enum.KeyCode.W then
+            forwardDirection = 1 -- Avancer
+            print("Mouvement avant.")
+        elseif input.KeyCode == Enum.KeyCode.S then
+            forwardDirection = -1 -- Reculer
+            print("Mouvement arrière.")
+        elseif input.KeyCode == Enum.KeyCode.A then
+            rightDirection = -1 -- Aller à gauche
+            print("Mouvement gauche.")
+        elseif input.KeyCode == Enum.KeyCode.D then
+            rightDirection = 1 -- Aller à droite
+            print("Mouvement droite.")
+        end
+    end
+end)
+
+-- Détecte les touches relâchées pour stopper la direction
+userInputService.InputEnded:Connect(function(input)
+    if isDriving then
+        if input.KeyCode == Enum.KeyCode.W or input.KeyCode == Enum.KeyCode.S then
+            forwardDirection = 0 -- Stopper le mouvement avant/arrière
+            print("Arrêt du mouvement avant/arrière.")
+        elseif input.KeyCode == Enum.KeyCode.A or input.KeyCode == Enum.KeyCode.D then
+            rightDirection = 0 -- Stopper le mouvement gauche/droite
+            print("Arrêt du mouvement gauche/droite.")
+        end
+    end
+end)
+
+-- Fonction pour arrêter les forces et remettre les directions à zéro
+local function resetVehicleForces()
+    if forwardForce then
+        forwardForce.Force = Vector3.new(0, 0, 0)
+    end
+    if rightForce then
+        rightForce.Force = Vector3.new(0, 0, 0)
+    end
+    forwardDirection = 0
+    rightDirection = 0
+end
+
+-- Détecte quand le joueur entre ou sort d'un véhicule
+humanoid:GetPropertyChangedSignal("SeatPart"):Connect(function()
+    if humanoid.SeatPart then
+        -- Le joueur entre dans un véhicule
+        local vehicle = getVehicle()
+        if vehicle then
+            isDriving = true
+            initializeVehicleForces(vehicle)
+        end
+    else
+        -- Le joueur sort du véhicule
+        print("Le joueur a quitté le véhicule.")
+        isDriving = false
+        resetVehicleForces() -- Réinitialise les forces et directions
+    end
+end)
+
+-- Met à jour la force appliquée au véhicule
+game:GetService("RunService").Stepped:Connect(function()
+    if isDriving and primaryPart then
+        -- Applique la force pour avancer/reculer
+        forwardForce.Force = primaryPart.CFrame.LookVector * speed * forwardDirection
+
+        -- Applique la force pour aller à gauche/droite
+        rightForce.Force = primaryPart.CFrame.RightVector * speed * rightDirection
+    else
+        -- Si le joueur n'est pas dans le véhicule, réinitialise les forces
+        resetVehicleForces()
+    end
+end)
